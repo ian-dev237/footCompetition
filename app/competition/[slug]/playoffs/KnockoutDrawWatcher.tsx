@@ -50,14 +50,22 @@ export default function KnockoutDrawWatcher({
     b: t.playerB as DrawPlayer,
   }));
 
+  // Include the draw timestamp in the storage key so a fresh draw replays
+  // the animation even in the same browser tab.
+  const drawStamp = rTies
+    .map(t => t.drawnAt ?? '')
+    .filter(Boolean)
+    .sort()
+    .join('|');
+
   return (
     <DrawAnimation
-      key={round}
+      key={`${round}:${drawStamp}`}
       title={`Tirage — ${KNOCKOUT_LABEL[round]}`}
       subtitle="Aller-retour"
       pairs={pairs}
       poolForRoulette={allPlayers}
-      storageKey={`draw:${slug}:${round}`}
+      storageKey={`draw:${slug}:${round}:${drawStamp}`}
     />
   );
 }

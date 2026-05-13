@@ -35,13 +35,24 @@ export default async function FinalePage({ params }: { params: { slug: string } 
 
       <KnockoutRoundView ties={views} size="xl" layout="stack" />
 
-      {champion && (
+      {champion && comp.celebrationAt && (
         <ChampionCelebration
           slug={comp.slug}
+          celebrationAt={comp.celebrationAt.toISOString()}
           championName={champion.name}
           championInitials={champion.initials}
           championColor={champion.color}
           championImageUrl={champion.imageUrl}
+          losers={comp.players
+            .map(cp => cp.player)
+            .filter(p => p.id !== champion.id)
+            .map(p => ({
+              name: p.name,
+              initials: p.initials,
+              color: p.color,
+              imageUrl: p.imageUrl,
+            }))}
+          totalPlayers={comp.players.length}
         />
       )}
     </div>

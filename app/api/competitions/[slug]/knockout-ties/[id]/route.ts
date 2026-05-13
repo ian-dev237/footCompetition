@@ -33,6 +33,12 @@ export async function PUT(req: Request, { params }: { params: { slug: string; id
   if (!tie || tie.competition.slug !== params.slug) {
     return NextResponse.json({ error: 'tie introuvable' }, { status: 404 });
   }
+  if (!tie.playerAId || !tie.playerBId) {
+    return NextResponse.json(
+      { error: 'tirage requis avant de saisir les scores' },
+      { status: 409 },
+    );
+  }
 
   // Compute status from the merged record (existing values overridden by incoming)
   const merged = { ...tie, ...data };

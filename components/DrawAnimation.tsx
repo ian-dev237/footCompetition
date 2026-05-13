@@ -28,13 +28,16 @@ type Props = {
   onDone?: () => void;
 };
 
-// Total budget ≈ 5s
-const COUNTDOWN_MS = 600;            // each of 3, 2, 1, GO = 4 ticks → ~2.4s … reduced to ~2.0s
-const COUNTDOWN_STEPS = ['3', '2', '1', 'GO'];
+// Target total duration ~8s, independent of pair count.
+const TARGET_TOTAL_MS = 8000;
+const COUNTDOWN_MS = 600;            // each of 3, 2, 1, GO = 4 ticks
+const COUNTDOWN_STEPS = ['1', '2', '3', '4', '5'];
 const SPIN_AFTER_COUNTDOWN_MS = 300; // breathing room before locking
 const LOCK_STAGGER_MS = 380;         // delay between each pair locking
 const HOLD_MS = 700;                 // hold final state before closing
+const CLOSE_MS = 200;                // fade-out
 const SPIN_TICK_MS = 90;             // avatar cycle speed during roll
+const COUNTDOWN_TOTAL_MS = (COUNTDOWN_STEPS.length - 1) * COUNTDOWN_MS + SPIN_AFTER_COUNTDOWN_MS;
 
 export default function DrawAnimation({
   title, subtitle, pairs, poolForRoulette, storageKey, onDone,
@@ -85,19 +88,28 @@ export default function DrawAnimation({
     return () => clearInterval(id);
   }, [open, phase, lockedCount, pairs.length]);
 
-  // Schedule pair locks one by one
+  // Schedule pair locks one by one. Stretch with an initial spin so the whole
+  // animation lasts at least TARGET_TOTAL_MS regardless of pair count.
   useEffect(() => {
     if (phase !== 'reveal') return;
     clearTimers();
+    const lockingMs = LOCK_STAGGER_MS * pairs.length;
+    const preSpinMs = Math.max(
+      0,
+      TARGET_TOTAL_MS - COUNTDOWN_TOTAL_MS - lockingMs - HOLD_MS - CLOSE_MS,
+    );
     for (let i = 0; i < pairs.length; i++) {
-      const t = window.setTimeout(() => setLockedCount(c => Math.max(c, i + 1)), LOCK_STAGGER_MS * (i + 1)) as unknown as number;
+      const t = window.setTimeout(
+        () => setLockedCount(c => Math.max(c, i + 1)),
+        preSpinMs + LOCK_STAGGER_MS * (i + 1),
+      ) as unknown as number;
       timers.current.push(t);
     }
     // After all are locked, hold then close
     const tEnd = window.setTimeout(() => {
       setPhase('done');
-      window.setTimeout(() => { setOpen(false); onDone?.(); }, 200);
-    }, LOCK_STAGGER_MS * pairs.length + HOLD_MS) as unknown as number;
+      window.setTimeout(() => { setOpen(false); onDone?.(); }, CLOSE_MS);
+    }, preSpinMs + lockingMs + HOLD_MS) as unknown as number;
     timers.current.push(tEnd);
 
     return () => clearTimers();

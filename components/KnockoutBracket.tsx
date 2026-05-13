@@ -26,6 +26,7 @@ export type BTie = {
   penA: number | null;
   penB: number | null;
   status: string;
+  drawnAt: string | null;
 };
 
 function aggregateForA(t: BTie): number | null {

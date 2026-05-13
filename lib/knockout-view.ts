@@ -31,6 +31,7 @@ export function tieToView(
     etHomeScore: number | null;   etAwayScore: number | null;
     penA: number | null;          penB: number | null;
     status: string;
+    drawnAt: Date | null;
   },
   playerById: Map<string, BPlayer>,
 ): BTie {
@@ -50,6 +51,7 @@ export function tieToView(
     penA: t.penA,
     penB: t.penB,
     status: t.status,
+    drawnAt: t.drawnAt ? t.drawnAt.toISOString() : null,
   };
 }
 

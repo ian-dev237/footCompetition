@@ -268,12 +268,8 @@ export async function maybePropagate(competitionId: string) {
   const sf  = all.filter(t => t.round === 'SEMIFINAL');
   const f   = all.find(t => t.round === 'FINAL');
 
-  const r16Done = r16.length === 4 && r16.every(t => t.status === 'FINISHED');
-  const sfSeeded = sf.every(t => t.playerAId && t.playerBId);
-  if (r16Done && !sfSeeded) {
-    await drawSemifinals(competitionId);
-  }
-
+  // The semi-final draw is explicit (admin clicks a button); it is not
+  // auto-propagated even when the round of 16 is fully decided.
   const sfDone = sf.length === 2 && sf.every(t => t.status === 'FINISHED');
   const finalSeeded = !!f?.playerAId && !!f?.playerBId;
   if (sfDone && !finalSeeded) {

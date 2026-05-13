@@ -65,10 +65,11 @@ type KTie = {
   penA: number | null;
   penB: number | null;
   status: string;
+  drawnAt: Date | string | null;
 };
 
 export default function ScoreEditor({
-  slug, journees, knockoutTies, players, championshipDone, competitionStatus,
+  slug, journees, knockoutTies, players, championshipDone, competitionStatus, celebrationAt,
 }: {
   slug: string;
   journees: Journee[];
@@ -76,6 +77,7 @@ export default function ScoreEditor({
   players: Player[];
   championshipDone: boolean;
   competitionStatus: string;
+  celebrationAt: string | null;
 }) {
   const router = useRouter();
   const [currentJ, setCurrentJ] = useState(() => {
@@ -83,14 +85,15 @@ export default function ScoreEditor({
     return firstUnfinished?.number ?? journees[0]?.number ?? 1;
   });
   const playerById = new Map(players.map(p => [p.id, p]));
-  const journee = journees.find(j => j.number === currentJ);
-
   const r16 = knockoutTies.filter(t => t.round === 'ROUND_OF_16');
   const sf  = knockoutTies.filter(t => t.round === 'SEMIFINAL');
   const final = knockoutTies.find(t => t.round === 'FINAL');
   const knockoutSeeded = knockoutTies.length > 0;
+  const r16Done = r16.length === 4 && r16.every(t => t.status === 'FINISHED');
+  const sfSeeded = sf.length > 0 && sf.every(t => t.playerAId && t.playerBId);
 
   const [showR16Modal, setShowR16Modal] = useState(false);
+  const [showSFModal, setShowSFModal] = useState(false);
   const [drawBusy, setDrawBusy] = useState(false);
   const [drawError, setDrawError] = useState<string | null>(null);
 
@@ -100,15 +103,16 @@ export default function ScoreEditor({
   const [redrawError, setRedrawError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!showR16Modal && !redrawTarget) return;
+    if (!showR16Modal && !showSFModal && !redrawTarget) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       if (showR16Modal && !drawBusy) setShowR16Modal(false);
+      if (showSFModal && !drawBusy) setShowSFModal(false);
       if (redrawTarget && !redrawBusy) setRedrawTarget(null);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [showR16Modal, drawBusy, redrawTarget, redrawBusy]);
+  }, [showR16Modal, showSFModal, drawBusy, redrawTarget, redrawBusy]);
 
   async function confirmRedraw() {
     if (!redrawTarget) return;
@@ -163,21 +167,52 @@ export default function ScoreEditor({
     }
   }
 
+  async function confirmDrawSF() {
+    setDrawError(null);
+    setDrawBusy(true);
+    const res = await fetch(`/api/competitions/${slug}/knockout/semifinals`, { method: 'POST' });
+    if (res.ok) {
+      try {
+        ['SEMIFINAL', 'FINAL'].forEach(r => {
+          localStorage.removeItem(`draw:${slug}:${r}`);
+          sessionStorage.removeItem(`draw:${slug}:${r}`);
+        });
+      } catch { /* ignore */ }
+      setShowSFModal(false);
+      setDrawBusy(false);
+      router.refresh();
+    } else {
+      setDrawError((await res.json()).error ?? 'Erreur lors du tirage');
+      setDrawBusy(false);
+    }
+  }
+
+  const [celebBusy, setCelebBusy] = useState(false);
+  const [celebError, setCelebError] = useState<string | null>(null);
+  async function triggerCelebration() {
+    setCelebError(null);
+    setCelebBusy(true);
+    const res = await fetch(`/api/competitions/${slug}/celebration`, { method: 'POST' });
+    if (res.ok) {
+      try {
+        // Strip any old per-tab guard so the celebration can replay in this tab too.
+        Object.keys(sessionStorage).forEach(k => {
+          if (k.startsWith(`champion-celebration:${slug}`)) sessionStorage.removeItem(k);
+        });
+      } catch { /* ignore */ }
+      setCelebBusy(false);
+      router.refresh();
+    } else {
+      setCelebError((await res.json().catch(() => ({}))).error ?? 'Erreur');
+      setCelebBusy(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Championship section */}
       <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="font-bold">Phase de poule (Round-Robin)</h2>
-          {championshipDone && !knockoutSeeded && (
-            <button
-              onClick={() => setShowR16Modal(true)}
-              className="rounded-lg bg-accent-gold text-bg-primary font-bold px-3 py-1.5 text-xs hover:opacity-90"
-            >
-              Tirage des huitièmes →
-            </button>
-          )}
-        </div>
+        <h2 className="font-bold">Phase de poule (Round-Robin)</h2>
 
         <div className="flex flex-wrap gap-2">
           {journees.map(j => {
@@ -202,32 +237,81 @@ export default function ScoreEditor({
           })}
         </div>
 
-        {journee && (
-          <div className="grid gap-2">
-            {journee.matches.map(m => (
+        {/* Keep all journées mounted so debounced saves never get cancelled
+            when the admin switches journée mid-typing. Only the current one
+            is visible. */}
+        {journees.map(j => (
+          <div
+            key={j.id}
+            className={clsx('grid gap-2', j.number !== currentJ && 'hidden')}
+          >
+            {j.matches.map(m => (
               <MatchRow key={m.id} slug={slug} m={m} />
             ))}
           </div>
-        )}
+        ))}
       </section>
 
       {/* Knockout section */}
-      {knockoutSeeded && (
+      {(knockoutSeeded || championshipDone) && (
         <section className="space-y-4">
           <h2 className="font-bold">Phases finales</h2>
 
-          <RoundBlock
-            title="Huitièmes (aller-retour)"
-            ties={r16}
-            slug={slug}
-            playerById={playerById}
-            onRedraw={r16.length > 0 ? () => { setRedrawError(null); setRedrawTarget('ROUND_OF_16'); } : undefined}
-          />
+          {championshipDone && !knockoutSeeded && (
+            <div className="rounded-xl border border-accent-gold/40 bg-accent-gold/10 p-4 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="font-bold text-sm">Phase de poule terminée 🎉</div>
+                <div className="text-xs text-txt-secondary mt-0.5">
+                  Lance le tirage des huitièmes pour démarrer les phases finales.
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setDrawError(null); setShowR16Modal(true); }}
+                className="shrink-0 rounded-lg bg-accent-gold text-bg-primary font-bold px-3 py-2 text-xs hover:opacity-90"
+              >
+                🎲 Tirage des huitièmes →
+              </button>
+            </div>
+          )}
+
+          {knockoutSeeded && (
+            <RoundBlock
+              title="Huitièmes (aller-retour)"
+              ties={r16}
+              slug={slug}
+              playerById={playerById}
+              onRedraw={r16.length > 0 ? () => { setRedrawError(null); setRedrawTarget('ROUND_OF_16'); } : undefined}
+            />
+          )}
+
+          {r16Done && !sfSeeded && (
+            <div className="rounded-xl border border-accent-gold/40 bg-accent-gold/10 p-4 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="font-bold text-sm">Huitièmes terminés 🎉</div>
+                <div className="text-xs text-txt-secondary mt-0.5">
+                  Lance le tirage des demi-finales pour pouvoir saisir les scores.
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setDrawError(null); setShowSFModal(true); }}
+                className="shrink-0 rounded-lg bg-accent-gold text-bg-primary font-bold px-3 py-2 text-xs hover:opacity-90"
+              >
+                🎲 Tirage des demi-finales →
+              </button>
+            </div>
+          )}
+
           <RoundBlock
             title="Demi-finales (aller-retour)"
             ties={sf}
             slug={slug}
             playerById={playerById}
+            locked={!sfSeeded}
+            lockedHint={!r16Done
+              ? 'Termine d’abord les huitièmes.'
+              : 'Lance le tirage des demi-finales pour débloquer la saisie des scores.'}
             onRedraw={sf.some(t => t.playerAId && t.playerBId) ? () => { setRedrawError(null); setRedrawTarget('SEMIFINAL'); } : undefined}
           />
           {final && (
@@ -235,8 +319,33 @@ export default function ScoreEditor({
           )}
 
           {competitionStatus === 'FINISHED' && (
-            <div className="rounded-xl border border-accent-gold/40 bg-accent-gold/10 p-3 text-sm text-accent-gold font-semibold">
-              🏆 Compétition terminée — le champion est couronné.
+            <div className="rounded-xl border border-accent-gold/40 bg-accent-gold/10 p-4 space-y-3">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div className="min-w-0">
+                  <div className="font-bold text-sm text-accent-gold">🏆 Compétition terminée</div>
+                  <div className="text-xs text-txt-secondary mt-0.5">
+                    {celebrationAt
+                      ? `Cérémonie lancée le ${new Date(celebrationAt).toLocaleString('fr-FR')}. Tu peux la relancer côté public.`
+                      : 'Lance la cérémonie pour que le sacre du champion s’affiche côté public.'}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={triggerCelebration}
+                  disabled={celebBusy}
+                  className="shrink-0 rounded-lg bg-accent-gold text-bg-primary font-bold px-3 py-2 text-xs hover:opacity-90 disabled:opacity-50"
+                >
+                  {celebBusy
+                    ? 'Lancement…'
+                    : celebrationAt ? '🎉 Relancer la cérémonie' : '🎉 Lancer la cérémonie →'}
+                </button>
+              </div>
+              {celebError && (
+                <div role="alert" className="rounded-lg border border-status-loss/40 bg-status-loss/10 px-3 py-2 text-xs text-status-loss flex items-start gap-2">
+                  <span aria-hidden>⚠</span>
+                  <span>{celebError}</span>
+                </div>
+              )}
             </div>
           )}
         </section>
@@ -305,6 +414,63 @@ export default function ScoreEditor({
         </div>
       )}
 
+      {showSFModal && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="sf-modal-title"
+          className="fixed inset-0 z-[90] flex items-center justify-center p-4 bg-bg-primary/80 backdrop-blur-sm"
+          onClick={() => !drawBusy && setShowSFModal(false)}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            className="w-full max-w-md rounded-2xl border border-bdr bg-bg-secondary shadow-2xl p-6 space-y-5"
+          >
+            <div className="flex items-start gap-3">
+              <div className="h-10 w-10 rounded-full bg-accent-gold/20 text-accent-gold flex items-center justify-center text-xl shrink-0">
+                🎲
+              </div>
+              <div className="min-w-0">
+                <h3 id="sf-modal-title" className="font-bold text-lg leading-tight">
+                  Tirage des demi-finales ?
+                </h3>
+                <p className="text-sm text-txt-secondary mt-1">
+                  Les <span className="text-txt-primary font-semibold">4 vainqueurs des huitièmes</span> seront tirés au sort en 2 affiches.
+                  L’animation se lancera côté public.
+                </p>
+              </div>
+            </div>
+
+            {drawError && (
+              <div role="alert" className="rounded-lg border border-status-loss/40 bg-status-loss/10 px-3 py-2 text-sm text-status-loss flex items-start gap-2">
+                <span aria-hidden>⚠</span>
+                <span>{drawError}</span>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowSFModal(false)}
+                disabled={drawBusy}
+                className="rounded-lg border border-bdr bg-bg-tertiary px-4 py-2 text-sm font-semibold text-txt-secondary hover:text-txt-primary disabled:opacity-50"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={confirmDrawSF}
+                disabled={drawBusy}
+                autoFocus
+                className="rounded-lg bg-accent-gold text-bg-primary px-4 py-2 text-sm font-bold hover:opacity-90 disabled:opacity-50"
+              >
+                {drawBusy ? 'Tirage…' : 'Lancer le tirage'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showR16Modal && (
         <div
           role="dialog"
@@ -366,20 +532,22 @@ export default function ScoreEditor({
 }
 
 function RoundBlock({
-  title, ties, slug, playerById, onRedraw,
+  title, ties, slug, playerById, onRedraw, locked, lockedHint,
 }: {
   title: string;
   ties: KTie[];
   slug: string;
   playerById: Map<string, Player>;
   onRedraw?: () => void;
+  locked?: boolean;
+  lockedHint?: string;
 }) {
   if (ties.length === 0) return null;
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
         <div className="text-xs uppercase tracking-wider text-txt-muted font-semibold">{title}</div>
-        {onRedraw && (
+        {onRedraw && !locked && (
           <button
             type="button"
             onClick={onRedraw}
@@ -391,17 +559,23 @@ function RoundBlock({
           </button>
         )}
       </div>
-      <div className="grid gap-3 lg:grid-cols-2">
-        {ties.map(t => (
-          <TieEditor
-            key={t.id}
-            slug={slug}
-            t={t}
-            playerA={t.playerAId ? playerById.get(t.playerAId) ?? null : null}
-            playerB={t.playerBId ? playerById.get(t.playerBId) ?? null : null}
-          />
-        ))}
-      </div>
+      {locked ? (
+        <div className="rounded-xl border border-dashed border-bdr bg-bg-secondary/50 p-4 text-sm text-txt-muted text-center">
+          🔒 {lockedHint ?? 'Tirage en attente.'}
+        </div>
+      ) : (
+        <div className="grid gap-3 lg:grid-cols-2">
+          {ties.map(t => (
+            <TieEditor
+              key={`${t.id}:${t.drawnAt ? new Date(t.drawnAt).getTime() : 'none'}`}
+              slug={slug}
+              t={t}
+              playerA={t.playerAId ? playerById.get(t.playerAId) ?? null : null}
+              playerB={t.playerBId ? playerById.get(t.playerBId) ?? null : null}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
