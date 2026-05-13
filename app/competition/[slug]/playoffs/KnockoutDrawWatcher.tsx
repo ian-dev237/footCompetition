@@ -45,7 +45,7 @@ export default function KnockoutDrawWatcher({
 
   const pairs: DrawPair[] = rTies.map((t, i) => ({
     key: t.id,
-    label: round === 'FINAL' ? 'Finale' : `${KNOCKOUT_LABEL[round]} · Match ${i + 1}`,
+    label: `${KNOCKOUT_LABEL[round]} · Match ${i + 1}`,
     a: t.playerA as DrawPlayer,
     b: t.playerB as DrawPlayer,
   }));
@@ -54,7 +54,7 @@ export default function KnockoutDrawWatcher({
     <DrawAnimation
       key={round}
       title={`Tirage — ${KNOCKOUT_LABEL[round]}`}
-      subtitle={round === 'FINAL' ? 'Match unique' : 'Aller-retour'}
+      subtitle="Aller-retour"
       pairs={pairs}
       poolForRoulette={allPlayers}
       storageKey={`draw:${slug}:${round}`}
