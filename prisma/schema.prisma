@@ -1,0 +1,112 @@
+// SQLite-flavored Prisma schema. Enums are stored as string columns
+// (see lib/constants.ts).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Player {
+  id        String   @id @default(cuid())
+  name      String
+  initials  String
+  color     String
+  imageUrl  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  homeMatches  Match[]             @relation("HomePlayer")
+  awayMatches  Match[]             @relation("AwayPlayer")
+  competitions CompetitionPlayer[]
+}
+
+model Competition {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  status    String   @default("REGISTRATION") // REGISTRATION | ONGOING | KNOCKOUT | FINISHED
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  players      CompetitionPlayer[]
+  journees     Journee[]
+  knockoutTies KnockoutTie[]
+}
+
+model CompetitionPlayer {
+  id            String      @id @default(cuid())
+  competition   Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  competitionId String
+  player        Player      @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  playerId      String
+  rank          Int?
+
+  @@unique([competitionId, playerId])
+}
+
+model Journee {
+  id            String      @id @default(cuid())
+  number        Int
+  competition   Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  competitionId String
+  matches       Match[]
+
+  @@unique([competitionId, number])
+}
+
+model Match {
+  id           String    @id @default(cuid())
+  journee      Journee   @relation(fields: [journeeId], references: [id], onDelete: Cascade)
+  journeeId    String
+  homePlayerId String
+  awayPlayerId String
+  homePlayer   Player    @relation("HomePlayer", fields: [homePlayerId], references: [id])
+  awayPlayer   Player    @relation("AwayPlayer", fields: [awayPlayerId], references: [id])
+  homeScore    Int?
+  awayScore    Int?
+  status       String    @default("PENDING") // PENDING | LIVE | FINISHED
+  playedAt     DateTime?
+  updatedAt    DateTime  @updatedAt
+}
+
+/// A knockout tie. For two-legged rounds (ROUND_OF_16, SEMIFINAL) we use
+/// leg1 and leg2 score fields. For the FINAL (single leg) we use leg1 only.
+/// playerA hosts leg1, playerB hosts leg2 (returns inverted).
+model KnockoutTie {
+  id            String      @id @default(cuid())
+  competition   Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  competitionId String
+
+  round         String // ROUND_OF_16 | SEMIFINAL | FINAL
+  slot          Int    // 1..N within the round (drives bracket layout)
+  twoLegged     Boolean @default(true)
+
+  playerAId     String?
+  playerBId     String?
+
+  // Leg 1 (playerA at home)
+  leg1HomeScore Int?
+  leg1AwayScore Int?
+
+  // Leg 2 (playerB at home → leg2HomeScore is playerB's goals)
+  leg2HomeScore Int?
+  leg2AwayScore Int?
+
+  // After extra time on the second leg (or only leg for final)
+  etHomeScore   Int?
+  etAwayScore   Int?
+
+  // Penalty shootout (single shootout decides the tie)
+  penA          Int?
+  penB          Int?
+
+  status        String   @default("PENDING") // PENDING | LEG1 | LEG2 | ET | PENALTIES | FINISHED
+  drawnAt       DateTime? // when the pairing was drawn (for animation cue)
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([competitionId, round, slot])
+}
