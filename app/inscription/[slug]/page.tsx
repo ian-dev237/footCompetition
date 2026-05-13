@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { APP_NAME } from '@/lib/constants';
 import InscriptionForm from './InscriptionForm';
 import Realtime from '@/components/Realtime';
-import PlayerAvatar from '@/components/PlayerAvatar';
+import RegisteredPlayers from './RegisteredPlayers';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,30 +40,7 @@ export default async function InscriptionPage({ params }: { params: { slug: stri
         </Link>
       )}
 
-      <section>
-        <div className="text-xs uppercase tracking-wider text-txt-muted font-semibold mb-2">
-          Inscrits ({comp.players.length})
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-          {comp.players.map(cp => (
-            <div key={cp.id} className="flex items-center gap-2 rounded-lg bg-bg-secondary border border-bdr p-2">
-              <PlayerAvatar
-                name={cp.player.name}
-                initials={cp.player.initials}
-                color={cp.player.color}
-                imageUrl={cp.player.imageUrl}
-                size={32}
-              />
-              <span className="text-sm truncate">{cp.player.name}</span>
-            </div>
-          ))}
-          {comp.players.length === 0 && (
-            <div className="col-span-full text-center text-txt-muted text-sm py-6 border border-dashed border-bdr rounded-xl">
-              Sois le premier à t’inscrire.
-            </div>
-          )}
-        </div>
-      </section>
+      <RegisteredPlayers players={comp.players} />
 
       <Realtime slug={comp.slug} />
     </div>
