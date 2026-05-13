@@ -44,6 +44,18 @@ export async function POST(req: Request, { params }: { params: { slug: string } 
     );
   }
 
+  // Photo is required for public registration
+  const photo = form.get('photo');
+  if (!(photo instanceof File) || photo.size === 0) {
+    return NextResponse.json({ error: 'photo de profil obligatoire' }, { status: 400 });
+  }
+  if (!ALLOWED.has(photo.type)) {
+    return NextResponse.json({ error: 'format photo invalide' }, { status: 400 });
+  }
+  if (photo.size > 3 * 1024 * 1024) {
+    return NextResponse.json({ error: 'photo > 3 Mo' }, { status: 400 });
+  }
+
   const player = await prisma.player.create({
     data: {
       name,
@@ -52,21 +64,11 @@ export async function POST(req: Request, { params }: { params: { slug: string } 
     },
   });
 
-  // Optional photo
-  const photo = form.get('photo');
-  if (photo instanceof File && photo.size > 0) {
-    if (!ALLOWED.has(photo.type)) {
-      return NextResponse.json({ error: 'format photo invalide' }, { status: 400 });
-    }
-    if (photo.size > 3 * 1024 * 1024) {
-      return NextResponse.json({ error: 'photo > 3 Mo' }, { status: 400 });
-    }
-    const buf = Buffer.from(await photo.arrayBuffer());
-    const ext = photo.type === 'image/png' ? 'png' : photo.type === 'image/webp' ? 'webp' : 'jpg';
-    const url = await savePlayerImage(player.id, buf, ext);
-    await prisma.player.update({ where: { id: player.id }, data: { imageUrl: url } });
-    player.imageUrl = url;
-  }
+  const buf = Buffer.from(await photo.arrayBuffer());
+  const ext = photo.type === 'image/png' ? 'png' : photo.type === 'image/webp' ? 'webp' : 'jpg';
+  const url = await savePlayerImage(player.id, buf, ext);
+  await prisma.player.update({ where: { id: player.id }, data: { imageUrl: url } });
+  player.imageUrl = url;
 
   await prisma.competitionPlayer.create({
     data: { competitionId: comp.id, playerId: player.id },

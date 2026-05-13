@@ -25,11 +25,12 @@ export default function InscriptionForm({ slug }: { slug: string }) {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) { setErr('Entre ton nom'); return; }
+    if (!photoFile) { setErr('Ajoute une photo de profil'); return; }
     setBusy(true); setErr(null);
     try {
       const form = new FormData();
       form.append('name', name.trim());
-      if (photoFile) form.append('photo', photoFile);
+      form.append('photo', photoFile);
       const res = await fetch(`/api/competitions/${slug}/register`, { method: 'POST', body: form });
       if (!res.ok) throw new Error((await res.json()).error ?? 'erreur');
       setDone(true);
@@ -89,7 +90,7 @@ export default function InscriptionForm({ slug }: { slug: string }) {
             className="w-full rounded-lg bg-bg-tertiary border border-bdr px-3 py-2.5 text-sm focus:outline-none focus:border-accent-blue"
           />
           <div className="text-[11px] text-txt-muted mt-1">
-            Photo optionnelle · sans photo, un avatar avec tes initiales sera créé.
+            Photo obligatoire · clique sur l'avatar pour en ajouter une.
           </div>
         </div>
       </div>
@@ -111,7 +112,7 @@ export default function InscriptionForm({ slug }: { slug: string }) {
 
       <button
         type="submit"
-        disabled={busy || !name.trim()}
+        disabled={busy || !name.trim() || !photoFile}
         className="w-full rounded-lg bg-accent-blue text-white font-semibold py-3 hover:bg-blue-600 disabled:opacity-40"
       >
         {busy ? 'Envoi…' : 'Je m’inscris'}

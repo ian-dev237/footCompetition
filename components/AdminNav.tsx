@@ -9,6 +9,7 @@ export default function AdminNav() {
   const tabs = [
     { href: '/admin', label: 'Tableau de bord' },
     { href: '/admin/joueurs', label: 'Joueurs' },
+    { href: '/admin/password', label: 'Mot de passe' },
   ];
   return (
     <nav className="flex flex-wrap items-center gap-1 border-b border-bdr">
