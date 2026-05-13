@@ -1,4 +1,4 @@
-// SQLite-flavored Prisma schema. Enums are stored as string columns
+// Postgres-flavored Prisma schema. Enums are stored as string columns
 // (see lib/constants.ts).
 
 generator client {
@@ -6,7 +6,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
