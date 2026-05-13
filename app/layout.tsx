@@ -7,6 +7,10 @@ import { APP_NAME } from '@/lib/constants';
 export const metadata: Metadata = {
   title: `${APP_NAME} — Compétition`,
   description: 'Tournoi eFootball™ / FIFA — phase de poule + élimination directe',
+  icons: {
+    icon: '/logopkf.png',
+    shortcut: '/logopkf.png',
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
